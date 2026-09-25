@@ -44,6 +44,6 @@ preferred-citation:
     - family-names: "Lienkamp"
       given-names: "Markus"
   title: "FLEX-DEPOT: An open-source framework for multi-market flexibility commercialization of a logistics depot incorporating electric trucks"
-  journal: "SoftwareX"
+  #journal: "TBD"
   year: 2026
-  status: submitted
+  status: in-preperation
