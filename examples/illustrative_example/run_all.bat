@@ -1,8 +1,12 @@
 @echo off
 REM ================================
-REM Flex-Depot illustrative example: run S1 -> S4 sequentially, then aggregate.
+REM Flex-Depot illustrative example: run S1 -> S4 (bidirectional) and their
+REM unidirectional companions S1_uni -> S4_uni sequentially, then aggregate.
+REM The *_uni runs reuse each scenario's TOML but point at the unidirectional
+REM flexibility band; aggregate_results.py pairs them for the bidirectional-vs-
+REM unidirectional comparison (#8).
 REM Fail fast: abort on the first failing scenario (non-zero exit code).
-REM Expect ~30-45 min per scenario with HiGHS (1-month window).
+REM Expect ~30-45 min per scenario with HiGHS (1-month window); 8 runs total.
 REM All outputs land in results\illustrative_example\.
 REM ================================
 
@@ -16,7 +20,7 @@ if not exist "%OUT%" mkdir "%OUT%"
 set "INDEX=%OUT%\run_index.csv"
 echo scenario,run_dir,runtime_s> "%INDEX%"
 
-for %%S in (s1 s2 s3 s4) do (
+for %%S in (s1 s2 s3 s4 s1_uni s2_uni s3_uni s4_uni) do (
     set "CONFIG=examples\illustrative_example\settings_%%S.toml"
     set "RUN_DIR=%OUT%\%%S"
     echo === Starting scenario %%S [!CONFIG!] -- expect ~30-45 min with HiGHS ===

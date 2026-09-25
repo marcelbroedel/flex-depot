@@ -1,8 +1,12 @@
 #!/bin/bash
 # ================================
-# Flex-Depot illustrative example: run S1 -> S4 sequentially, then aggregate.
+# Flex-Depot illustrative example: run S1 -> S4 (bidirectional) and their
+# unidirectional companions S1_uni -> S4_uni sequentially, then aggregate.
+# The *_uni runs reuse each scenario's TOML but point at the unidirectional
+# flexibility band; aggregate_results.py pairs them for the bidirectional-vs-
+# unidirectional comparison (#8).
 # Fail fast: abort on the first failing scenario (non-zero exit code).
-# Expect ~30-45 min per scenario with HiGHS (1-month window).
+# Expect ~30-45 min per scenario with HiGHS (1-month window); 8 runs total.
 # All outputs land in results/illustrative_example/.
 # ================================
 
@@ -16,7 +20,7 @@ mkdir -p "$OUT"
 INDEX="$OUT/run_index.csv"
 echo "scenario,run_dir,runtime_s" > "$INDEX"
 
-for SID in s1 s2 s3 s4; do
+for SID in s1 s2 s3 s4 s1_uni s2_uni s3_uni s4_uni; do
     CONFIG="examples/illustrative_example/settings_${SID}.toml"
     RUN_DIR="$OUT/$SID"
     echo "=== [$(date '+%Y-%m-%d %H:%M:%S')] Starting scenario ${SID} (${CONFIG}) -- expect ~30-45 min with HiGHS ==="

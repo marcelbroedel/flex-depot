@@ -114,11 +114,42 @@ def main() -> int:
         return 1
 
     index = pd.read_csv(index_path)
-    rows = [
-        _scenario_row(str(r["scenario"]), Path(str(r["run_dir"])), float(r["runtime_s"]))
+    # Build one row per run, keyed by the raw scenario id (e.g. "s1", "s1_uni").
+    rows_by_id = {
+        str(r["scenario"]): _scenario_row(
+            str(r["scenario"]), Path(str(r["run_dir"])), float(r["runtime_s"])
+        )
         for _, r in index.iterrows()
-    ]
-    df = pd.DataFrame(rows)
+    }
+
+    # Merge each unidirectional companion (<sid>_uni) into its bidirectional base
+    # row as extra columns, so comparison.csv keeps one row per scenario and the
+    # figure can overlay the unidirectional advantage. Runs without a matching
+    # companion get NaN (column stays present for a stable schema).
+    UNI_SUFFIX = "_uni"
+    base_ids = [sid for sid in rows_by_id if not sid.endswith(UNI_SUFFIX)]
+    records = []
+    for sid in base_ids:
+        row = rows_by_id[sid]
+        uni = rows_by_id.get(sid + UNI_SUFFIX)
+        if uni is not None:
+            # Fairness premise of #8: uni and bi are compared against the *same*
+            # S0 anchor (identical driving energy and static price).
+            if abs(uni["ref_cost_s0_eur"] - row["ref_cost_s0_eur"]) > 1e-6:
+                print(
+                    f"WARNING: {sid}: S0 reference differs between bidirectional "
+                    f"({row['ref_cost_s0_eur']:.2f}) and unidirectional "
+                    f"({uni['ref_cost_s0_eur']:.2f}) run - the advantage overlay is "
+                    "only comparable if both share Ref_driving_energy_kWh and price.",
+                    file=sys.stderr,
+                )
+            row["cost_advantage_uni_eur"] = uni["cost_advantage_eur"]
+            row["cost_advantage_uni_pct"] = uni["cost_advantage_pct"]
+        else:
+            row["cost_advantage_uni_eur"] = float("nan")
+            row["cost_advantage_uni_pct"] = float("nan")
+        records.append(row)
+    df = pd.DataFrame(records)
 
     # The uncontrolled-charging reference (S0) uses identical band data and the
     # same static price in every scenario, so it must be identical everywhere.

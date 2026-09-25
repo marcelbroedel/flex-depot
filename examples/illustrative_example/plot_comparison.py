@@ -31,6 +31,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 try:
     import matplotlib.colors as mcolors
+    import matplotlib.patheffects as mpe
     import matplotlib.pyplot as plt
     from figure_style import (
         BASE_FONT_PT,
@@ -41,6 +42,7 @@ try:
         SMALL_FONT_PT,
         apply_paper_style,
     )
+    from matplotlib.lines import Line2D
     from matplotlib.patches import Patch
 except ImportError:
     sys.exit("matplotlib is required for the figure scripts: pip install -e .[paper]")
@@ -82,6 +84,30 @@ def _panel_advantage(ax, df: pd.DataFrame) -> None:
             fontsize=SMALL_FONT_PT,
         )
 
+    # Unidirectional-fleet companion runs (#8): overlay each scenario's
+    # unidirectional advantage as a horizontal level marker inside its
+    # (bidirectional) bar. The gap between marker and bar top is the value of
+    # bidirectionality. A white outline keeps the black marker legible on both
+    # the dark setup gray and the hatched S4 bar. Skipped when the column is
+    # absent or empty, so the figure still renders from a bidirectional-only run.
+    uni = df["cost_advantage_uni_eur"] if "cost_advantage_uni_eur" in df.columns else None
+    drew_uni = False
+    if uni is not None:
+        half_w = 0.30  # matches the 0.6 bar width
+        for xi, yv in enumerate(uni):
+            if pd.isna(yv):
+                continue
+            ax.hlines(
+                yv,
+                xi - half_w,
+                xi + half_w,
+                color="black",
+                lw=1.6,
+                zorder=6,
+                path_effects=[mpe.withStroke(linewidth=3.2, foreground="white")],
+            )
+            drew_uni = True
+
     ax.axhline(0.0, color="black", lw=0.5)
     ax.set_xticks(list(x))
     ax.set_xticklabels(
@@ -99,7 +125,19 @@ def _panel_advantage(ax, df: pd.DataFrame) -> None:
         label="Imperfect foresight",
     )
     forecast_patch._hatch_color = mcolors.to_rgba(HATCH_COLOR)
-    ax.legend(handles=[forecast_patch], frameon=False, loc="upper left")
+    handles = [forecast_patch]
+    if drew_uni:
+        handles.append(
+            Line2D(
+                [0],
+                [0],
+                color="black",
+                lw=1.6,
+                path_effects=[mpe.withStroke(linewidth=3.2, foreground="white")],
+                label="Unidirectional fleet",
+            )
+        )
+    ax.legend(handles=handles, frameon=False, loc="upper left")
 
 
 def _panel_composition(ax, df: pd.DataFrame) -> None:
@@ -183,7 +221,7 @@ def main() -> int:
     fig_dir = csv_path.parent / "figures"
     fig_dir.mkdir(parents=True, exist_ok=True)
     failed = False
-    for ext in ("pdf", "svg"):
+    for ext in ("pdf", "svg", "png"):
         out = fig_dir / f"comparison.{ext}"
         try:
             fig.savefig(out)

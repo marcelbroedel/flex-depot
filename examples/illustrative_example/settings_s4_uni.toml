@@ -1,0 +1,91 @@
+# =============================================================================
+# Paper scenario S4 (unidirectional fleet): day-ahead + intraday + FCR, imperfect price foresight
+# Companion run to settings_s4.toml for the bidirectional-vs-unidirectional
+# comparison. IDENTICAL to settings_s4.toml except for simulation.name and
+# the flexibility bounds file, which points at the unidirectional band
+# (Power_lower_kW = 0 everywhere -> no discharge/export). The uncontrolled S0
+# reference is unchanged (same Ref_driving_energy_kWh, same static price), so the
+# cost advantage is measured against the identical anchor.
+# =============================================================================
+
+[simulation]
+start = "2026-02-01 00:00"
+end = "2026-03-01 00:00"
+timestep_hours = 0.25
+name = "illustrative_s4_uni"
+solver = "highs"
+warmup_hours = 48   # spin-up before the reporting window so the first day's DA/FCR gates commit on a full horizon (excluded from results/KPIs)
+
+[optimization.markets.dayahead]
+enabled = true
+source = "data/example/prices/prices_DA_example.csv"
+forecast_source = "data/example/prices/prices_DA_forecast_example.csv"
+fee_eur_per_kwh = 0.00005                     # clearing fee + exchange fee + broker fee + ...
+
+[optimization.markets.intraday]
+enabled = true
+source = "data/example/prices/prices_IDC_example.csv"
+forecast_source = "data/example/prices/prices_IDC_forecast_example.csv"
+fee_eur_per_kwh = 0.0001                      # clearing fee + exchange fee + broker fee + ...
+
+[optimization.trading]
+mode = "realistic"
+
+[optimization.trading.dayahead]
+gate_closure_hour = "12:00"
+closes_previous_day = true
+
+[optimization.trading.intraday]
+offset_minutes_before_delivery = 5 # continuous intraday gate closure 5 min before delivery
+
+[optimization.trading.fcr]
+enabled = true
+prices_source = "data/example/prices/prices_FCR_example.xlsx"
+frequency_source = "data/example/frequency/frequency_example.csv"
+breakeven_analysis = false
+breakeven_include_zero_bid = false
+gate_closure_hour = "08:00"
+gate_closure_closes_previous_day = true
+gate_closure_timezone = "Europe/Berlin"
+product_hours = 4.0
+bid_block_mw = 1.0
+energy_reserve_minutes = 15.0
+reserve_penalty_eur_per_kwh = 10.0
+balance_penalty_eur_per_kwh = 0.0001
+frequency_nominal_hz = 50.0
+deadband_hz = 0.010
+full_activation_hz = 0.200
+
+[optimization.imbalance]
+enabled = true
+source_pos = "data/example/prices/prices_reBAPpos_example.csv"
+source_neg = "data/example/prices/prices_reBAPneg_example.csv"
+imbalance_volume_penalty_eur_per_kwh = 1000.0
+
+[optimization]
+virtual_arbitrage = false
+
+[optimization.mpc]
+da_horizon_hours = 48
+id_horizon_hours = 48
+fcr_price_horizon_hours = 48
+fcr_frequency_horizon_minutes = 0
+terminal_condition = true
+terminal_weight_eur_per_kwh = 50.0
+
+[optimization.flexibility]
+bounds_file = "data/example/flexibility/vb_bounds_example_uni.csv"
+
+[optimization.flexibility.cycle_regularization]
+enabled = true
+cost_eur_per_kwh_throughput = 0.02
+
+[optimization.depot]
+eta_grid2depot = 0.98
+eta_depot2grid = 0.98
+grid_connection_limit = 4200
+
+[postprocessing.reference_driving_energy_costs]
+enabled = true
+static_price_eur_per_kwh = 0.1142
+energy_column = "Ref_driving_energy_kWh"
