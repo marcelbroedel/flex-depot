@@ -1,6 +1,6 @@
 """
 Time-series detail figure of the illustrative example (4-day window,
-190 mm double column, five rows).
+170 mm full page width, five rows).
 
 Reads dispatch.csv and the settings.toml snapshot from a run directory
 (default: the 4-day quick-start run in
@@ -46,6 +46,7 @@ try:
     from figure_style import (
         BAND_GRAY,
         BASE_FONT_PT,
+        FULL_WIDTH_MM,
         GRID_KW,
         MARKET_COLORS,
         MM_TO_INCH,
@@ -109,7 +110,8 @@ def main() -> int:
     bar_width = (0.25 / 24.0) * 0.9  # matplotlib datetime widths are in days
 
     apply_paper_style()
-    fig, axes = plt.subplots(5, 1, sharex=True, figsize=(190 * MM_TO_INCH, 195 * MM_TO_INCH))
+    # Energy Informatics full-page format: 170 mm wide (max height 225 mm).
+    fig, axes = plt.subplots(5, 1, sharex=True, figsize=(FULL_WIDTH_MM * MM_TO_INCH, 195 * MM_TO_INCH))
     ax_pr, ax_fcrp, ax_pw, ax_e, ax_pos = axes
 
     # (a) DA / ID prices
@@ -264,7 +266,7 @@ def main() -> int:
         ax.set_axisbelow(True)
         # y=1.0 pins the title; auto-positioning would push (e) above the
         # zoom inset that sticks out of the panel
-        ax.set_title(label, fontsize=BASE_FONT_PT, loc="left", y=1.0)
+        ax.set_title(label, fontsize=BASE_FONT_PT, loc="left", y=1.0, fontweight="bold")
 
     # collected legend above all panels
     legend_handles = [
@@ -300,7 +302,7 @@ def main() -> int:
     fig_dir = Path("results/illustrative_example/figures")
     fig_dir.mkdir(parents=True, exist_ok=True)
     failed = False
-    for ext in ("pdf", "svg"):
+    for ext in ("pdf", "svg", "png"):
         out = fig_dir / f"detail_4day.{ext}"
         try:
             fig.savefig(out)

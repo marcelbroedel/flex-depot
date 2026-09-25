@@ -18,6 +18,13 @@ scenarios by construction).
 Gate-closure logic (`trading.mode = "realistic"`) is always enabled; it is not
 a scenario variable.
 
+Each scenario also has a **unidirectional companion** (`settings_s1_uni.toml` …
+`settings_s4_uni.toml`), identical except that it points at the unidirectional
+flexibility band (`vb_bounds_example_unidirectional.csv`, no discharge/export).
+The runner computes all eight; `aggregate_results.py` pairs each `*_uni` run
+into its bidirectional row so the comparison figure can overlay the
+unidirectional result (the gap = value of bidirectionality).
+
 The bundled quick-start config (`src/flex_dep_opt/config/settings_quickstart.toml`,
 run via `run_quickstart.sh` / `run_quickstart.bat`) is the **4-day detail window** of
 this example: the S3 setup over Fri 2026-02-06 to Tue 2026-02-10 (two weekdays,
@@ -73,17 +80,19 @@ bash examples/illustrative_example/run_all.sh     # Linux/macOS/Git Bash
 examples\illustrative_example\run_all.bat         # Windows cmd
 ```
 
-The runner executes S1 → S4 sequentially via `python -m flex_dep_opt run-sim /
-run-post` (the same entry point as `run_quickstart.sh`), aborts on the first
-failure, and wall-clock-times each scenario. Expect **~30–45 min per scenario**
+The runner executes S1 → S4 and their unidirectional companions S1_uni → S4_uni
+sequentially via `python -m flex_dep_opt run-sim / run-post` (the same entry
+point as `run_quickstart.sh`), aborts on the first failure, and wall-clock-times
+each scenario. Expect **~30–45 min per scenario**, i.e. ~4–6 h for all eight,
 with HiGHS. All outputs land in `results/illustrative_example/`:
 
 ```
 results/illustrative_example/
-    s1/ s2/ s3/ s4/       # one run directory per scenario
+    s1/ s2/ s3/ s4/               # bidirectional run directories
+    s1_uni/ s2_uni/ s3_uni/ s4_uni/   # unidirectional companions
     detail_4day/          # quick-start run (see "Paper figures")
     run_index.csv         # scenario -> run dir + runtime
-    comparison.csv        # aggregated comparison table
+    comparison.csv        # aggregated comparison table (uni paired in)
     figures/              # paper figures (PDF/SVG)
 ```
 
@@ -105,7 +114,7 @@ python -m flex_dep_opt run-post --config examples/illustrative_example/settings_
 Both figure scripts need the optional plotting extra: `pip install -e .[paper]`
 
 ```bash
-# Two-panel bar chart S1-S4 (190 mm): (a) gross profit vs. static price charging
+# Two-panel bar chart S1-S4 (170 mm): (a) gross profit vs. static price charging
 # in EUR and %, (b) stacked cashflow composition per market
 python examples/illustrative_example/plot_comparison.py
 

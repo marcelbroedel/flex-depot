@@ -1,18 +1,27 @@
 """
 Shared style for the illustrative-example figures.
 
-Times serif, 9 pt base / 8 pt small, thin axes, TUM palette (DA = blue,
-ID = orange, FCR = green; market colors are reserved for per-market
+Sans-serif (Arial/Helvetica) 8 pt base / 7 pt small, thin axes, TUM palette
+(DA = blue, ID = orange, FCR = green; market colors are reserved for per-market
 quantities).
+
+Targets the Energy Informatics (SpringerOpen) figure format: the final PDF uses
+discrete widths of 85 mm (half page) or 170 mm (full page), max height 225 mm,
+300 dpi at final size. Figures are designed at the final width (1:1) so 7-8 pt
+lettering stays legible, use sans-serif lettering (Helvetica/Arial; Times/serif
+is discouraged), keep all lines > 0.25 pt, and embed fonts (pdf.fonttype 42).
 """
 
 from __future__ import annotations
 
 import matplotlib.pyplot as plt
 
-BASE_FONT_PT = 9.0
-SMALL_FONT_PT = 8.0
+BASE_FONT_PT = 8.0
+SMALL_FONT_PT = 7.0
 MM_TO_INCH = 1.0 / 25.4
+# SpringerOpen/Energy Informatics final-size widths; design figures at these.
+FULL_WIDTH_MM = 170.0  # full page width
+HALF_WIDTH_MM = 85.0  # half page width
 
 # TUM palette
 MARKET_COLORS = {
@@ -37,9 +46,9 @@ def apply_paper_style() -> None:
     """Apply the shared serif figure style (print-oriented, editable SVG text)."""
     plt.rcParams.update(
         {
-            "font.family": "serif",
-            "font.serif": ["Times New Roman", "Times", "STIXGeneral", "DejaVu Serif"],
-            "mathtext.fontset": "stix",
+            "font.family": "sans-serif",
+            "font.sans-serif": ["Arial", "Helvetica", "DejaVu Sans"],
+            "mathtext.fontset": "stixsans",
             "font.size": BASE_FONT_PT,
             "axes.labelsize": BASE_FONT_PT,
             "xtick.labelsize": BASE_FONT_PT,

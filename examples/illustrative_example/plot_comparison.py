@@ -35,6 +35,7 @@ try:
     import matplotlib.pyplot as plt
     from figure_style import (
         BASE_FONT_PT,
+        FULL_WIDTH_MM,
         GRID_KW,
         MARKET_COLORS,
         MM_TO_INCH,
@@ -114,7 +115,7 @@ def _panel_advantage(ax, df: pd.DataFrame) -> None:
         [f"{sc}\n{mk}" for sc, mk in zip(df["scenario"], df["markets"])], fontsize=SMALL_FONT_PT
     )
     ax.set_ylabel("Cost reduction vs. static price charging\nfor one-month period (€)")
-    ax.margins(y=0.18)
+    ax.margins(y=0.24)  # headroom so the tallest bar annotation clears the legend
     ax.grid(**GRID_KW)
     ax.set_axisbelow(True)
 
@@ -137,7 +138,16 @@ def _panel_advantage(ax, df: pd.DataFrame) -> None:
                 label="Unidirectional fleet",
             )
         )
-    ax.legend(handles=handles, frameon=False, loc="upper left")
+    ax.legend(
+        handles=handles,
+        frameon=False,
+        loc="upper left",
+        fontsize=SMALL_FONT_PT,
+        handlelength=1.3,
+        handletextpad=0.4,
+        labelspacing=0.3,
+        borderaxespad=0.2,
+    )
 
 
 def _panel_composition(ax, df: pd.DataFrame) -> None:
@@ -209,14 +219,18 @@ def main() -> int:
     df = pd.read_csv(csv_path)
 
     apply_paper_style()
-    fig, (ax_a, ax_b) = plt.subplots(1, 2, figsize=(190 * MM_TO_INCH, 75 * MM_TO_INCH))
+    # Energy Informatics full-page format: 170 mm wide, designed at final size
+    # (300 dpi) so the two side-by-side panels and 7-8 pt lettering stay legible.
+    fig, (ax_a, ax_b) = plt.subplots(
+        1, 2, figsize=(FULL_WIDTH_MM * MM_TO_INCH, 68 * MM_TO_INCH)
+    )
 
     _panel_advantage(ax_a, df)
     _panel_composition(ax_b, df)
     for ax, label in ((ax_a, "(a)"), (ax_b, "(b)")):
-        ax.set_title(label, fontsize=BASE_FONT_PT, loc="left")
+        ax.set_title(label, fontsize=BASE_FONT_PT, loc="left", fontweight="bold")
 
-    fig.tight_layout(w_pad=2.0)
+    fig.tight_layout(w_pad=1.0)
 
     fig_dir = csv_path.parent / "figures"
     fig_dir.mkdir(parents=True, exist_ok=True)
