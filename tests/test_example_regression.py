@@ -21,6 +21,16 @@ Option A (FCR activation cashflow) was added 2026-07-21:
   - gross_profit_eur increased by fcr_activation_cf_eur = +51.368 EUR
   - total_potential_gross_profit_delta_eur increased by the same amount
   - trading_profit_eur, dispatch volumes, and all integer counts unchanged
+
+Warm-up window (simulation.warmup_hours = 48) was added 2026-09-25 and the
+golden values refreshed. The MPC now spins up 48 h before the reporting window
+(2026-02-06 .. 2026-02-10) so the first reporting day's DA and FCR positions
+are committed on a full forward horizon instead of a zero default; warm-up
+steps are excluded from all recorded results and KPIs. This removed the
+start-of-horizon initialization artifact and changed the first-day dispatch,
+hence the updated economics and integer counts. pass2_steps stays 12: those
+residuals are the FCR-activation-not-nettable reBAP settlements described
+above, not initialization effects.
 """
 
 from pathlib import Path
@@ -38,21 +48,21 @@ EXAMPLE_TOML = REPO_ROOT / "src/flex_dep_opt/config/settings_quickstart.toml"
 # Golden KPI values — update this dict after any intentional model change.
 _GOLDEN = {
     # Core economics
-    "gross_profit_eur": 172.650,
-    "trading_profit_eur": -55.035,
-    "fees_eur": -1.221,
-    "fcr_revenue_eur": 191.700,
+    "gross_profit_eur": 224.407,
+    "trading_profit_eur": -16.532,
+    "fees_eur": -1.075,
+    "fcr_revenue_eur": 210.020,
     "imb_cost_eur": -14.162,
-    "fcr_activation_cf_eur": 51.368,
+    "fcr_activation_cf_eur": 46.156,
     # Savings vs. uncontrolled charging
-    "total_potential_gross_profit_delta_eur": 558.780,
+    "total_potential_gross_profit_delta_eur": 610.536,
     # Energy balance
-    "net_kwh": -2985.521,
-    "sell_kwh": 5693.942,
-    "buy_kwh": 8679.464,
+    "net_kwh": -2771.777,
+    "sell_kwh": 5699.440,
+    "buy_kwh": 8471.217,
     # Integer counts — exact
-    "trade_steps": 161,
-    "fcr_slots_committed": 10,
+    "trade_steps": 174,
+    "fcr_slots_committed": 11,
     "pass2_steps": 12,
 }
 

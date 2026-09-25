@@ -181,6 +181,7 @@ Simulation settings:
 | simulation.start             | str    | Simulation start time (inclusive)                          | YYYY-MM-DD HH:MM         |
 | simulation.end               | str    | Simulation end time (inclusive)                            | YYYY-MM-DD HH:MM         |
 | simulation.timestep_hours    | float  | Simulation timestep in hours                               | 0.25 (others not tested) |
+| simulation.warmup_hours      | float  | Warm-up/spin-up lead-in before the reporting window. The MPC starts `warmup_hours` before `simulation.start` so positions whose gate closes before the reporting start (e.g. the first delivery day's DA auction, closing on D-1) are committed on a full horizon during warm-up instead of defaulting to zero. Warm-up steps advance the state (SoC, committed positions) but are excluded from all results/KPIs. Input series must cover `start − warmup_hours`. Set above the DA gate lead (> ~12 h; ≥ ~40 h when FCR is enabled). | ≥ 0 (hours), default 0 |
 | simulation.name              | str    | Identifier used for naming result files                    | arbitrary string         |
 | simulation.solver            | str    | Optimization solver backend                                | {highs, gurobi, cbc}     |
 | simulation.solver_threads    | int    | Solver thread count (set 1 for parallel batch runs)        | ≥ 1 or unset (default 8) |

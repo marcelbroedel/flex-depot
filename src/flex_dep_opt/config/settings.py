@@ -20,6 +20,14 @@ class SimulationSettings(BaseModel):
     solver_time_limit_s: int | None = None
     # Stream solver output to stdout — useful to diagnose hangs or slow solves.
     solver_tee: bool = False
+    # Warm-up / spin-up lead-in before the reporting window (hours). The MPC runs
+    # from (start - warmup_hours) so positions whose gate closes before `start`
+    # (e.g. the first delivery day's DA auction, which closes on D-1) are committed
+    # on a full forward horizon during warm-up instead of defaulting to zero.
+    # Warm-up steps advance the state (SoC, committed positions) but are excluded
+    # from all recorded results and KPIs. Should exceed the DA gate lead (> ~12 h)
+    # to remove the start-of-horizon initialization artifact; 0 disables warm-up.
+    warmup_hours: float = Field(default=0.0, ge=0.0)
 
 
 class MarketDetail(BaseModel):

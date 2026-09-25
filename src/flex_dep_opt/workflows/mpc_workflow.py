@@ -225,8 +225,27 @@ def run_mpc(settings: Settings, run_dir: Path | None = None) -> Path:
     forecast_prices_by_market = build_forecast_prices_from_settings(settings)
     fees_by_market = build_fees_from_settings(settings)
 
-    start = local_config_timestamp_to_utc(sim_cfg.start, local_tz=LOCAL_TIMEZONE)
+    # `report_start` bounds the RESULTS window (what postprocessing/KPIs see).
+    # `start` is the internal simulation start: a warm-up lead-in of `warmup_hours`
+    # is prepended so positions whose gate closes before the reporting start
+    # (notably the first delivery day's DA auction, closing on D-1) are committed
+    # on a full forward horizon during warm-up rather than pinned to zero. Warm-up
+    # steps drive the state forward but are excluded from all recorded outputs.
+    report_start = local_config_timestamp_to_utc(sim_cfg.start, local_tz=LOCAL_TIMEZONE)
     end = local_config_timestamp_to_utc(sim_cfg.end, local_tz=LOCAL_TIMEZONE)
+
+    warmup_hours = float(getattr(sim_cfg, "warmup_hours", 0.0) or 0.0)
+    start = report_start - pd.Timedelta(hours=warmup_hours)
+
+    if warmup_hours > 0.0 and opt_cfg.markets.dayahead.enabled and opt_cfg.trading.mode == "realistic":
+        first_da_gate = gate_closure_timestamp("DA", report_start, opt_cfg)
+        if start >= first_da_gate:
+            logger.warning(
+                f"warmup_hours={warmup_hours} may be too small: the first reporting day's DA gate "
+                f"closes at {first_da_gate.tz_convert(LOCAL_TIMEZONE)}, but warm-up only reaches back to "
+                f"{start.tz_convert(LOCAL_TIMEZONE)}. The start-of-horizon initialization artifact may "
+                f"persist; increase warmup_hours beyond the DA gate lead."
+            )
 
     for mk in prices_by_market:
         prices_by_market[mk] = prices_by_market[mk].loc[start:end]
@@ -261,6 +280,13 @@ def run_mpc(settings: Settings, run_dir: Path | None = None) -> Path:
 
     full_index = prices_by_market[next(iter(prices_by_market))].index
     validate_regular_index(full_index, timestep_hours=step_hours, name="simulation decision index")
+
+    if warmup_hours > 0.0 and full_index[0] >= report_start:
+        raise ValueError(
+            f"warmup_hours={warmup_hours} requested but no input data before the reporting start "
+            f"{report_start.tz_convert(LOCAL_TIMEZONE)} — extend the input series back by at least "
+            f"the warm-up length, or reduce warmup_hours."
+        )
 
     # Full state index (N+1): add terminal state timestamp
     dt = pd.Timedelta(hours=step_hours)
@@ -613,7 +639,8 @@ def run_mpc(settings: Settings, run_dir: Path | None = None) -> Path:
             first_row = dispatch_window.iloc[0].copy()
             first_row["used_rebap"] = used_rebap
             first_row.name = window_idx[0]
-            rows.append(first_row)
+            if current_time >= report_start:  # skip warm-up steps in recorded results
+                rows.append(first_row)
 
             # --------------------------------------------------------
             # 9.7) Commit market positions at gate closure
@@ -662,7 +689,11 @@ def run_mpc(settings: Settings, run_dir: Path | None = None) -> Path:
                         row["committed_new"] = row["p_opt"]
                         row["commit_now"] = True
 
-                    commit_rows.append(row)
+                    # Record commits for reporting-window deliveries only; the
+                    # committed_positions state above is always updated (warm-up
+                    # commits the first reporting day's DA at its D-1 gate).
+                    if tau >= report_start:
+                        commit_rows.append(row)
 
             # commit fcr slots at their gate closure
             if hasattr(model, "S_FCR"):
@@ -788,22 +819,23 @@ def run_mpc(settings: Settings, run_dir: Path | None = None) -> Path:
                         },
                     )
 
-                    fcr_commit_rows.append(
-                        {
-                            "slot_start": slot,
-                            "gate_closure_time": gate_ts,
-                            "committed_at": current_time,
-                            "bid_kw": bid_val,
-                            "x_fcr_kw": committed_val,
-                            "x_fcr_mw": committed_val / 1000.0,
-                            "fcr_price": fcr_price_val,
-                            "slot_hours": slot_hours,
-                            "fcr_revenue_eur": (committed_val / 1000.0)
-                            * fcr_price_val
-                            * (slot_hours / fcr_product_hours),
-                            **breakeven_cols,
-                        }
-                    )
+                    if slot >= report_start:  # skip warm-up slots in recorded results
+                        fcr_commit_rows.append(
+                            {
+                                "slot_start": slot,
+                                "gate_closure_time": gate_ts,
+                                "committed_at": current_time,
+                                "bid_kw": bid_val,
+                                "x_fcr_kw": committed_val,
+                                "x_fcr_mw": committed_val / 1000.0,
+                                "fcr_price": fcr_price_val,
+                                "slot_hours": slot_hours,
+                                "fcr_revenue_eur": (committed_val / 1000.0)
+                                * fcr_price_val
+                                * (slot_hours / fcr_product_hours),
+                                **breakeven_cols,
+                            }
+                        )
 
                     if bid_val > 0:
                         logger.info(

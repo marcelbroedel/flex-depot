@@ -12,6 +12,7 @@ end = "2026-03-01 00:00"
 timestep_hours = 0.25
 name = "illustrative_s4"
 solver = "highs"
+warmup_hours = 48   # spin-up before the reporting window so the first day's DA/FCR gates commit on a full horizon (excluded from results/KPIs)
 
 [optimization.markets.dayahead]
 enabled = true
