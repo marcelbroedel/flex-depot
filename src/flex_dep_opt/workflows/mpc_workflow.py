@@ -31,6 +31,7 @@ from flex_dep_opt.io.results import (
 )
 from flex_dep_opt.io.time import LOCAL_TIMEZONE, local_config_timestamp_to_utc, validate_regular_index
 from flex_dep_opt.market.fcr import fcr_gate_closure_timestamp
+from flex_dep_opt.market.forecast_error import draw_ar1_shape, perturb_prices
 from flex_dep_opt.market.trading import (
     build_market_activity_mask_for_time,
     gate_closure_timestamp,
@@ -276,6 +277,31 @@ def run_mpc(settings: Settings, run_dir: Path | None = None) -> Path:
                 f"[{realized_idx[0]} .. {realized_idx[-1]}], got {len(forecast_idx)} steps "
                 f"[{forecast_idx[0] if len(forecast_idx) else 'empty'} .. "
                 f"{forecast_idx[-1] if len(forecast_idx) else 'empty'}]."
+            )
+
+    # --- Optional per-market forecast error: perturb only the DECISION price
+    #     series the solver optimizes on (forecast_prices_by_market), by
+    #     settlement + sigma * z with z ~ AR(1). The settlement series
+    #     prices_by_market[mk] stays untouched, so cashflows/KPIs are still
+    #     valued at the real CSV prices. sigma = 0 (or enabled = False)
+    #     reproduces the unperturbed decision series bit-for-bit.
+    #     NOTE: if both DA and ID errors are enabled at once, give them distinct
+    #     seeds — an identical seed draws the same AR(1) shape for both markets.
+    fe_by_market = {
+        "DA": opt_cfg.markets.dayahead.forecast_error,
+        "ID": opt_cfg.markets.intraday.forecast_error,
+    }
+    for mk, fe_cfg in fe_by_market.items():
+        if fe_cfg.enabled and mk in forecast_prices_by_market:
+            z_fe = draw_ar1_shape(
+                forecast_prices_by_market[mk].index, rho=fe_cfg.rho, seed=fe_cfg.seed
+            )
+            forecast_prices_by_market[mk] = perturb_prices(
+                forecast_prices_by_market[mk], z_fe, fe_cfg.sigma_eur_per_mwh
+            )
+            logger.info(
+                f"{mk} forecast error active: sigma={fe_cfg.sigma_eur_per_mwh} EUR/MWh, "
+                f"rho={fe_cfg.rho}, seed={fe_cfg.seed}"
             )
 
     full_index = prices_by_market[next(iter(prices_by_market))].index

@@ -12,13 +12,19 @@ warmup_hours = 48   # spin-up before the reporting window so the first day's DA/
 [optimization.markets.dayahead]
 enabled = true
 source = "data/example/prices/prices_DA_example.csv"
-# forecast_source = "data/example/prices/prices_DA_forecast_example.csv"  # optional MPC decision prices; omitted = perfect foresight
+# forecast_source = "path/to/da_forecast.csv"  # optional external MPC decision prices; omitted = perfect foresight
 fee_eur_per_kwh = 0.00005                     # clearing fee + exchange fee + broker fee + ...
+# Optional synthetic imperfect foresight (settlement + sigma * z, z ~ AR(1)); see settings_s4.toml:
+# [optimization.markets.dayahead.forecast_error]
+# enabled = true
+# sigma_eur_per_mwh = 12.5
+# rho = 0.944
+# seed = 1
 
 [optimization.markets.intraday]
 enabled = true
 source = "data/example/prices/prices_IDC_example.csv"
-# forecast_source = "data/example/prices/prices_IDC_forecast_example.csv"  # optional MPC decision prices; omitted = perfect foresight
+# forecast_source = "path/to/id_forecast.csv"  # optional external MPC decision prices; omitted = perfect foresight
 fee_eur_per_kwh = 0.0001                      # clearing fee + exchange fee + broker fee + ...
 
 [optimization.trading]

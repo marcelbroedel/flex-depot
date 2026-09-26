@@ -30,6 +30,17 @@ class SimulationSettings(BaseModel):
     warmup_hours: float = Field(default=0.0, ge=0.0)
 
 
+class ForecastErrorSettings(BaseModel):
+    # Per-market decision- vs. settlement-price split: the MPC optimizes on a
+    # synthetically perturbed price series (settlement + sigma * z, z ~ AR(1)
+    # with unit variance), while cashflows are settled on the real CSV prices.
+    # Applies to any market (DA or ID) that carries this block.
+    enabled: bool = False
+    sigma_eur_per_mwh: Annotated[float, Field(ge=0.0)] = 0.0
+    rho: Annotated[float, Field(ge=0.0, lt=1.0)] = 0.944  # lag-1 autocorr per 15-min step
+    seed: int = 1
+
+
 class MarketDetail(BaseModel):
     enabled: bool = False
     source: str
@@ -37,6 +48,7 @@ class MarketDetail(BaseModel):
     # None = perfect price foresight (realized prices used inside the MPC window).
     forecast_source: str | None = None
     fee_eur_per_kwh: float
+    forecast_error: ForecastErrorSettings = Field(default_factory=ForecastErrorSettings)
 
 
 class Markets(BaseModel):

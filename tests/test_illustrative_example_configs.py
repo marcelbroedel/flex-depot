@@ -2,20 +2,17 @@
 Fast configuration tests for the illustrative-example scenarios S1-S4 (no MPC runs).
 
 Asserts that the four TOMLs parse against the Settings model, enable exactly
-the intended markets, differ ONLY in markets / forecast_source / name, share
+the intended markets, differ ONLY in markets / forecast_error / name, share
 identical band/penalty/terminal/fee parameters and simulation windows, and
-that the S4 forecast CSVs exist and cover the simulation window plus the DA
-horizon lookahead.
+that S4's imperfect-foresight AR(1) forecast error is the only scenario with a
+non-trivial forecast_error block (DA + ID, distinct seeds, sigma > 0).
 """
 
 from pathlib import Path
 
-import pandas as pd
 import pytest
 
 from flex_dep_opt.config.settings import Settings
-from flex_dep_opt.io.prices import read_prices_csv
-from flex_dep_opt.io.time import LOCAL_TIMEZONE, local_config_timestamp_to_utc
 
 REPO_ROOT = Path(__file__).parent.parent
 SCENARIO_DIR = REPO_ROOT / "examples/illustrative_example"
@@ -44,28 +41,36 @@ def test_market_flags_per_scenario(scenarios):
         assert s.optimization.trading.mode == "realistic", sid
 
 
-def test_forecast_source_only_in_s4(scenarios):
+def test_forecast_error_only_in_s4(scenarios):
+    # S1-S3 have perfect price foresight: no forecast CSV, forecast error off.
     for sid in ("s1", "s2", "s3"):
         s = scenarios[sid]
-        assert s.optimization.markets.dayahead.forecast_source is None, sid
-        assert s.optimization.markets.intraday.forecast_source is None, sid
+        for mk in (s.optimization.markets.dayahead, s.optimization.markets.intraday):
+            assert mk.forecast_source is None, sid
+            assert mk.forecast_error.enabled is False, sid
 
+    # S4 is the imperfect-foresight scenario: AR(1) forecast error active on both
+    # scheduled markets, valued via the realized `source` (no forecast CSV).
     s4 = scenarios["s4"]
-    assert s4.optimization.markets.dayahead.forecast_source
-    assert s4.optimization.markets.intraday.forecast_source
-    assert "forecast" in s4.optimization.markets.dayahead.forecast_source
-    assert "forecast" in s4.optimization.markets.intraday.forecast_source
+    da_fe = s4.optimization.markets.dayahead.forecast_error
+    id_fe = s4.optimization.markets.intraday.forecast_error
+    assert s4.optimization.markets.dayahead.forecast_source is None
+    assert s4.optimization.markets.intraday.forecast_source is None
+    assert da_fe.enabled and id_fe.enabled
+    assert da_fe.sigma_eur_per_mwh > 0.0 and id_fe.sigma_eur_per_mwh > 0.0
+    # distinct seeds so DA and ID draw independent AR(1) shapes
+    assert da_fe.seed != id_fe.seed
 
 
 def test_shared_parameters_identical(scenarios):
-    """Everything except markets, forecast_source and simulation.name is identical."""
+    """Everything except markets, forecast_error and simulation.name is identical."""
 
     def comparable(s: Settings) -> dict:
         d = s.model_dump(mode="json")
         d["simulation"].pop("name")
-        d["optimization"]["markets"]["dayahead"].pop("forecast_source")
+        d["optimization"]["markets"]["dayahead"].pop("forecast_error")
         d["optimization"]["markets"]["intraday"].pop("enabled")
-        d["optimization"]["markets"]["intraday"].pop("forecast_source")
+        d["optimization"]["markets"]["intraday"].pop("forecast_error")
         d["optimization"]["trading"]["fcr"].pop("enabled")
         return d
 
@@ -77,23 +82,3 @@ def test_shared_parameters_identical(scenarios):
 def test_identical_simulation_window(scenarios):
     windows = {(s.simulation.start, s.simulation.end) for s in scenarios.values()}
     assert len(windows) == 1
-
-
-def test_forecast_csvs_exist_and_cover_window(scenarios, monkeypatch):
-    monkeypatch.chdir(REPO_ROOT)
-    s4 = scenarios["s4"]
-
-    start = local_config_timestamp_to_utc(s4.simulation.start, local_tz=LOCAL_TIMEZONE)
-    end = local_config_timestamp_to_utc(s4.simulation.end, local_tz=LOCAL_TIMEZONE)
-    lookahead_end = end + pd.Timedelta(hours=float(s4.optimization.mpc.da_horizon_hours))
-
-    for src in (
-        s4.optimization.markets.dayahead.forecast_source,
-        s4.optimization.markets.intraday.forecast_source,
-    ):
-        assert Path(src).is_file(), src
-        idx = read_prices_csv(src).index
-        assert idx[0] <= start, f"{src} starts after the simulation window ({idx[0]} > {start})"
-        assert idx[-1] >= lookahead_end, (
-            f"{src} ends before window + DA lookahead ({idx[-1]} < {lookahead_end})"
-        )
