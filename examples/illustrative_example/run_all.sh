@@ -15,6 +15,19 @@ set -u
 # Go to the repository root (data paths in the TOMLs are repo-relative)
 cd "$(dirname "$0")/../.." || exit 1
 
+# Pin the interpreter to THIS repo's venv. A bare `python` would use whatever
+# interpreter is active in the shell, silently producing results from the
+# wrong codebase. Force the flex-depot venv so the run always uses this repo.
+if [ -x ".venv/Scripts/python.exe" ]; then
+    PY=".venv/Scripts/python.exe"          # Windows (Git Bash) venv layout
+elif [ -x ".venv/bin/python" ]; then
+    PY=".venv/bin/python"                   # POSIX venv layout
+else
+    echo "ERROR: flex-depot venv interpreter not found under $PWD/.venv" >&2
+    echo "Create it (python -m venv .venv && .venv/*/pip install -e .) or fix the path." >&2
+    exit 1
+fi
+
 OUT="results/illustrative_example"
 mkdir -p "$OUT"
 INDEX="$OUT/run_index.csv"
@@ -26,11 +39,11 @@ for SID in s1 s2 s3 s4 s1_uni s2_uni s3_uni s4_uni; do
     echo "=== [$(date '+%Y-%m-%d %H:%M:%S')] Starting scenario ${SID} (${CONFIG}) -- expect ~30-45 min with HiGHS ==="
     T0=$(date +%s)
 
-    python -m flex_dep_opt run-sim --config "$CONFIG" --run-dir "$RUN_DIR" || {
+    "$PY" -m flex_dep_opt run-sim --config "$CONFIG" --run-dir "$RUN_DIR" || {
         echo "ERROR: scenario ${SID} simulation failed -- aborting (remaining scenarios skipped)." >&2
         exit 1
     }
-    python -m flex_dep_opt run-post --config "$CONFIG" --run-dir "$RUN_DIR" || {
+    "$PY" -m flex_dep_opt run-post --config "$CONFIG" --run-dir "$RUN_DIR" || {
         echo "ERROR: scenario ${SID} postprocessing failed -- aborting (remaining scenarios skipped)." >&2
         exit 1
     }
@@ -40,4 +53,4 @@ for SID in s1 s2 s3 s4 s1_uni s2_uni s3_uni s4_uni; do
     echo "=== Scenario ${SID} finished in $((T1 - T0)) s -> ${RUN_DIR} ==="
 done
 
-python examples/illustrative_example/aggregate_results.py "$INDEX" || exit 1
+"$PY" examples/illustrative_example/aggregate_results.py "$INDEX" || exit 1
