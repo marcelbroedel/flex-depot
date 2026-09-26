@@ -13,6 +13,7 @@ from flex_dep_opt.io.prices import (
 )
 from flex_dep_opt.io.results import read_latest_run_pointer, save_dispatch_to_csv, save_summary_to_csv
 from flex_dep_opt.io.time import LOCAL_TIMEZONE, local_config_timestamp_to_utc, validate_regular_index
+from flex_dep_opt.market.forecast_error import draw_ar1_shape, perturb_prices
 from flex_dep_opt.post.metrics import (
     compute_cashflows_per_step,
     compute_fcr_activation_energy,
@@ -212,28 +213,44 @@ def postprocess_mpc_results(settings: Settings | None = None, run_dir: Path | No
     kpis["pass2_fraction_pct"] = round(pass2_steps / len(dispatch) * 100, 4) if len(dispatch) > 0 else 0.0
 
     # -------------------------------------------------------------------------
-    # Price foresight: MPC decisions used forecast prices where configured;
-    # cashflows above are always settled on realized prices.
+    # Price foresight: MPC decisions used forecast prices where configured (an
+    # external forecast CSV and/or a synthetic AR(1) forecast error); cashflows
+    # above are always settled on realized prices.
     # -------------------------------------------------------------------------
     mk_cfg = settings.optimization.markets
+    market_details = (("DA", mk_cfg.dayahead), ("ID", mk_cfg.intraday))
     forecast_markets = [
         mk
-        for mk, detail in (("DA", mk_cfg.dayahead), ("ID", mk_cfg.intraday))
-        if detail.enabled and detail.forecast_source
+        for mk, detail in market_details
+        if detail.enabled and (detail.forecast_source or detail.forecast_error.enabled)
     ]
     kpis["price_foresight"] = "forecast" if forecast_markets else "perfect"
 
     if forecast_markets:
+        # Reconstruct the DECISION prices the MPC optimized on so the reported MAE
+        # reflects the actual series (forecast CSV where set, else realized, plus
+        # the optional AR(1) perturbation). The AR(1) draw must use the SAME index
+        # the MPC used: a warm-up lead-in is prepended there (start = report_start
+        # - warmup_hours), so with the same seed the shape is reproduced exactly
+        # before restricting to the reporting window for the statistic.
+        warmup_hours = float(getattr(sim, "warmup_hours", 0.0) or 0.0)
+        mpc_start = start - pd.Timedelta(hours=warmup_hours)
         forecast_prices_by_market = build_forecast_prices_from_settings(settings)
+        details_by_mk = dict(market_details)
         for mk in forecast_markets:
+            decision = forecast_prices_by_market[mk].loc[mpc_start:end]
+            fe_cfg = details_by_mk[mk].forecast_error
+            if fe_cfg.enabled:
+                z_fe = draw_ar1_shape(decision.index, rho=fe_cfg.rho, seed=fe_cfg.seed)
+                decision = perturb_prices(decision, z_fe, fe_cfg.sigma_eur_per_mwh)
+            decision = decision.loc[start:end]
             realized = prices_by_market[mk]
-            forecast = forecast_prices_by_market[mk].loc[start:end]
-            if not forecast.index.equals(realized.index):
+            if not decision.index.equals(realized.index):
                 raise ValueError(
-                    f"{mk} forecast prices do not cover the simulation window "
+                    f"{mk} decision prices do not cover the simulation window "
                     f"[{realized.index[0]} .. {realized.index[-1]}] — cannot compute forecast MAE."
                 )
-            mae = float((forecast - realized).abs().mean())
+            mae = float((decision - realized).abs().mean())
             kpis[f"{mk.lower()}_forecast_mae_eur_per_kwh"] = mae
 
     # -------------------------------------------------------------------------
