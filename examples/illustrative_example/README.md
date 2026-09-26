@@ -45,6 +45,12 @@ weekly-persistence naive forecast — one error draw per delivery hour for DA,
 one per 15-min step for ID. MPC decisions use the forecast series; settlement
 (cashflows, KPIs) always uses the realized series.
 
+The forecast CSVs are reproducible from the realized series via
+`scripts/generate_example_forecasts.py` (the full error model and citations are
+in that script's docstring). Run it to regenerate them, or with `--check` to
+verify the committed CSVs match the generator; `tests/test_example_forecasts.py`
+guards this provenance in CI.
+
 ## Modelling note: FCR activation energy and reBAP
 
 FCR activation changes the fleet's grid power flow relative to its scheduled
