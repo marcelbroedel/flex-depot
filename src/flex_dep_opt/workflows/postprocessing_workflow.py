@@ -192,7 +192,19 @@ def postprocess_mpc_results(settings: Settings | None = None, run_dir: Path | No
         # Intentionally not added to `energy_by_mk` so the headline
         # buy_kwh / sell_kwh KPIs stay pure scheduled-market volumes.
 
-    kpis = compute_kpis(cf_df, energy_by_mk, fees_by_market, commit=commit_df)
+    # Battery-cycling (degradation-proxy) cost on realized grid-side throughput,
+    # mirroring the optimization objective's main deg term (c_deg * sum(p_ch +
+    # p_dis) * dt). Folded into gross profit below so the KPI is consistent with
+    # the objective. (The objective's small hidden-FCR sub-timestep term is not
+    # reconstructed here; the realized p_ch/p_dis throughput is the physical wear.)
+    cyc_cfg = settings.optimization.flexibility.cycle_regularization
+    c_deg = cyc_cfg.cost_eur_per_kwh_throughput if cyc_cfg.enabled else 0.0
+    throughput_kwh = float((dispatch["p_ch_kw"] + dispatch["p_dis_kw"]).sum()) * dt
+    cycling_cost_eur = c_deg * throughput_kwh
+
+    kpis = compute_kpis(
+        cf_df, energy_by_mk, fees_by_market, commit=commit_df, cycling_cost_eur=cycling_cost_eur
+    )
     kpis.update(fcr_kpis)
 
     pass2_steps = int(dispatch["used_rebap"].astype(bool).sum()) if "used_rebap" in dispatch.columns else 0
@@ -254,15 +266,27 @@ def postprocess_mpc_results(settings: Settings | None = None, run_dir: Path | No
             start=start,
             end=end,
             static_price_eur_per_kwh=float(ref_cfg.static_price_eur_per_kwh),
+            charging_efficiency=float(ref_cfg.charging_efficiency),
             energy_column=str(ref_cfg.energy_column or DEFAULT_REFERENCE_ENERGY_COLUMN),
         )
         reference_csv = run_dir / "reference_driving_energy_costs.csv"
         save_dispatch_to_csv(reference_df, reference_csv, include_time_column=True, output_tz=LOCAL_TIMEZONE)
 
-        reference_gross_profit_eur = -float(reference_summary["ref_energy_cost_eur"])
+        # Apply the same cycling cost to the reference so only the *incremental*
+        # V2G/arbitrage wear enters the delta. The reference charges grid-side
+        # energy to drive (no discharge-to-grid), so its throughput is
+        # ref_grid_energy_kwh. Without this, the unidirectional case would be
+        # unfairly penalized for baseline charging wear the reference also incurs.
+        ref_cycling_cost_eur = c_deg * float(reference_summary["ref_grid_energy_kwh"])
+        reference_gross_profit_eur = (
+            -float(reference_summary["ref_energy_cost_eur"]) - ref_cycling_cost_eur
+        )
         kpis.update({
             "ref_gross_profit_eur": reference_gross_profit_eur,
+            "ref_cycling_cost_eur": ref_cycling_cost_eur,
             "ref_driving_energy_kwh": float(reference_summary["ref_driving_energy_kwh"]),
+            "ref_grid_energy_kwh": float(reference_summary["ref_grid_energy_kwh"]),
+            "ref_charging_efficiency": float(reference_summary["ref_charging_efficiency"]),
             "ref_static_price_eur_per_kwh": float(reference_summary["ref_static_price_eur_per_kwh"]),
             "ref_energy_cost_eur": float(reference_summary["ref_energy_cost_eur"]),
             "total_potential_gross_profit_delta_eur": (
@@ -272,8 +296,10 @@ def postprocess_mpc_results(settings: Settings | None = None, run_dir: Path | No
 
         print(
             "Reference driving energy costs: "
-            f"{reference_summary['ref_energy_cost_eur']:.2f} EUR "
-            f"for {reference_summary['ref_driving_energy_kwh']:.2f} kWh"
+            f"{reference_summary['ref_energy_cost_eur']:.2f} EUR for "
+            f"{reference_summary['ref_driving_energy_kwh']:.2f} kWh driving energy "
+            f"({reference_summary['ref_grid_energy_kwh']:.2f} kWh grid-side at "
+            f"eta={reference_summary['ref_charging_efficiency']:.3f})"
         )
 
     # KPIs: single row, including optional reference scenario fields
@@ -352,6 +378,6 @@ def postprocess_mpc_results(settings: Settings | None = None, run_dir: Path | No
         fcr_commit_csv.unlink(missing_ok=True)
         print("Commit CSVs removed (postprocessing.save_commits = false)")
 
-    print(f"Result CSV files saved → {run_dir.as_posix()}")
-    print(f"Result HTML plots saved → {run_dir.as_posix()}")
+    print(f"Result CSV files saved -> {run_dir.as_posix()}")
+    print(f"Result HTML plots saved -> {run_dir.as_posix()}")
     print("Postprocessing finished")

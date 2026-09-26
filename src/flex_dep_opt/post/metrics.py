@@ -307,6 +307,7 @@ def compute_kpis(
     fee_eur_per_kwh_by_market: Mapping[str, float],
     *,
     commit: pd.DataFrame | None = None,
+    cycling_cost_eur: float = 0.0,
 ) -> dict[str, float | int]:
     """
     Compute KPIs for reporting.
@@ -314,7 +315,16 @@ def compute_kpis(
     KPI definitions
     ---------------
     - gross_profit_eur:
-        Total cashflow plus fee term (fees are negative).
+        Total cashflow plus fee term (fees are negative), minus the
+        battery-cycling cost. The cycling cost is a degradation proxy and a real
+        variable operating cost (it scales with grid-side throughput), so it is
+        kept inside gross profit — this makes the reported KPI consistent with
+        the optimization objective, which maximizes cashflow net of the same
+        cycling term. Gross profit thus remains gross of fixed/capital costs
+        (e.g. bidirectional charging hardware), which are not modeled.
+    - cycling_cost_eur:
+        Battery-cycling (degradation-proxy) cost already subtracted in
+        gross_profit_eur; reported separately for transparency.
     - trading_profit_eur:
         Scheduled-market (DA/ID) cashflow only — excludes fees, imbalance
         cost, and FCR revenue.
@@ -360,7 +370,9 @@ def compute_kpis(
 
     total_cf_eur = float(cf_df["Total Cashflow [€/step]"].sum())
 
-    gross_profit_eur = total_cf_eur + fees_eur  # total CF (DA/ID + IMB + FCR) plus fees (negative)
+    # total CF (DA/ID + IMB + FCR) plus fees (negative), minus battery-cycling
+    # cost (degradation proxy) so gross profit matches the optimization objective.
+    gross_profit_eur = total_cf_eur + fees_eur - float(cycling_cost_eur)
     trading_profit_eur = (
         total_cf_eur - imb_cost_eur - fcr_cf_eur - fcr_activation_cf_eur
     )  # total CF less IMB, FCR capacity, and FCR activation → pure scheduled-market (DA/ID) CF
@@ -378,6 +390,7 @@ def compute_kpis(
 
     return {
         "gross_profit_eur": gross_profit_eur,
+        "cycling_cost_eur": float(cycling_cost_eur),
         "trading_profit_eur": trading_profit_eur,
         **per_market_cf,
         "fees_eur": float(fees_eur),

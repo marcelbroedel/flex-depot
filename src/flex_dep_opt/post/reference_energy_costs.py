@@ -13,17 +13,27 @@ def compute_reference_driving_energy_costs(
     start: pd.Timestamp,
     end: pd.Timestamp,
     static_price_eur_per_kwh: float,
+    charging_efficiency: float = 0.98,
     energy_column: str = DEFAULT_REFERENCE_ENERGY_COLUMN,
 ) -> tuple[pd.DataFrame, dict[str, float]]:
     """
     Compute static-price reference costs for driving energy.
 
-    The reference energy column is interpreted as kWh per timestep. It is not
-    multiplied by timestep duration.
+    The reference energy column holds the battery-side driving-energy demand in
+    kWh per timestep (it is not multiplied by timestep duration). Conventional
+    depot charging incurs the same charging losses as the optimized dispatch, so
+    the grid meter sees ``driving_energy / charging_efficiency``; the reference
+    cost is charged on this grid-side energy. ``charging_efficiency`` is a fixed
+    benchmark (decoupled from the optimization efficiency) so the reference
+    stays a common yardstick across scenarios, including the efficiency sweep.
     """
     price = float(static_price_eur_per_kwh)
     if price < 0.0:
         raise ValueError("static_price_eur_per_kwh must be non-negative.")
+
+    eta = float(charging_efficiency)
+    if not (0.0 < eta <= 1.0):
+        raise ValueError("charging_efficiency must be in (0, 1].")
 
     path = Path(flexibility_csv)
     df = pd.read_csv(path)
@@ -60,11 +70,14 @@ def compute_reference_driving_energy_costs(
     if ref.empty:
         raise ValueError(f"No reference energy data found in {path} for simulation window {start} to {end}.")
 
-    ref["Reference Energy Cost [EUR/step]"] = ref[energy_column] * price
+    ref["Ref_grid_energy_kWh"] = ref[energy_column] / eta
+    ref["Reference Energy Cost [EUR/step]"] = ref["Ref_grid_energy_kWh"] * price
     ref["Cumulative Reference Energy Cost [EUR]"] = ref["Reference Energy Cost [EUR/step]"].cumsum()
 
     summary = {
         "ref_driving_energy_kwh": float(ref[energy_column].sum()),
+        "ref_grid_energy_kwh": float(ref["Ref_grid_energy_kWh"].sum()),
+        "ref_charging_efficiency": eta,
         "ref_static_price_eur_per_kwh": price,
         "ref_energy_cost_eur": float(ref["Reference Energy Cost [EUR/step]"].sum()),
     }

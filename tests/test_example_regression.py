@@ -31,6 +31,14 @@ start-of-horizon initialization artifact and changed the first-day dispatch,
 hence the updated economics and integer counts. pass2_steps stays 12: those
 residuals are the FCR-activation-not-nettable reBAP settlements described
 above, not initialization effects.
+
+Battery-cycling cost in the KPIs was added 2026-09-26: gross_profit_eur now
+subtracts the degradation-proxy cost (c_deg * grid-side throughput), matching
+the optimization objective, and the reference gross profit subtracts the same
+cost on its grid-side charging energy so only incremental V2G/arbitrage wear
+enters the delta. The dispatch is unchanged (the objective already carried this
+term), so all volumes and integer counts stay put; only gross_profit_eur and
+total_potential_gross_profit_delta_eur shifted, and cycling_cost_eur is new.
 """
 
 from pathlib import Path
@@ -48,14 +56,15 @@ EXAMPLE_TOML = REPO_ROOT / "src/flex_dep_opt/config/settings_quickstart.toml"
 # Golden KPI values — update this dict after any intentional model change.
 _GOLDEN = {
     # Core economics
-    "gross_profit_eur": 224.407,
+    "gross_profit_eur": -72.853,
+    "cycling_cost_eur": 297.260,
     "trading_profit_eur": -16.532,
     "fees_eur": -1.075,
     "fcr_revenue_eur": 210.020,
     "imb_cost_eur": -14.162,
     "fcr_activation_cf_eur": 46.156,
     # Savings vs. uncontrolled charging
-    "total_potential_gross_profit_delta_eur": 610.536,
+    "total_potential_gross_profit_delta_eur": 390.160,
     # Energy balance
     "net_kwh": -2771.777,
     "sell_kwh": 5699.440,
@@ -86,6 +95,7 @@ def test_example_kpis(tmp_path, monkeypatch):
     # Float KPIs: 0.1 % relative tolerance
     for key in (
         "gross_profit_eur",
+        "cycling_cost_eur",
         "trading_profit_eur",
         "fees_eur",
         "fcr_revenue_eur",

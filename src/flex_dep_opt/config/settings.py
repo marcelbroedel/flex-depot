@@ -136,6 +136,13 @@ class ReferenceDrivingEnergyCostsSettings(BaseModel):
     enabled: bool = False
     static_price_eur_per_kwh: float | None = None
     energy_column: str = "Ref_driving_energy_kWh"
+    # Charging efficiency used to convert the battery-side driving-energy demand
+    # into grid-side metered energy for the reference cost: conventional depot
+    # charging incurs the same losses as the optimized dispatch, so the meter
+    # sees driving_energy / charging_efficiency. Kept as a fixed benchmark,
+    # decoupled from optimization.depot.eta_grid2depot, so the S0 reference stays
+    # a common yardstick across all scenarios.
+    charging_efficiency: Annotated[float, Field(gt=0.0, le=1.0)] = 0.98
 
 
 class PostprocessingSettings(BaseModel):
